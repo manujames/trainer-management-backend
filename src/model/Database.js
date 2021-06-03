@@ -37,7 +37,8 @@ const CredentialData = mongoose.model('credential', CredentialSchema);
 
 const CourseSchema = new Schema({
     courseId: String,
-    courseName: String
+    courseName: String,
+    batches: Array
 });
 const CourseData = mongoose.model('course', CourseSchema);
 

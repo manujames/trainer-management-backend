@@ -2,9 +2,8 @@ const express = require('express');
 const trainerRouter = express.Router();
 const TrainerData = require('../model/Database').TrainerData;
 const CredentialData = require('../model/Database').CredentialData;
-const EMAIL_ID = 'projectdev.fsd@gmail.com'
 
-router = (verifyToken,mailTrasporter)=>{
+router = (verifyToken,mailTrasporter,EMAIL_ID)=>{
     trainerRouter.get('/profile/',verifyToken,(req,res)=>{           //Get trainer profile
         let trainerId = req.user.ictId;
         if(req.user.role == 'admin'){

@@ -83,9 +83,32 @@ function verifyToken(req, res, next){
     }
 }
 
+let resetCodesObj = {};    // Object containing password reset codes eg:{TR1:487216}
+let timeOutObj = {};       // Save timeout object for each otp request
 
-const trainerRouter = require('./src/routes/trainerRoutes')(verifyToken,transporter);
-const adminRouter = require('./src/routes/adminRoutes')(verifyToken,transporter);
+const crypto = require('crypto');
+
+function generateOTP(id){
+    // Generate a 6 digit otp
+    let otp = crypto.randomInt(100000,999999);
+    // store it in object
+    resetCodesObj[id] = otp;
+    // If a timer already running for same id, cancel it.
+    if(timeOutObj[id]){
+        clearTimeout(timeOutObj[id]);
+        delete timeOutObj[id];
+    }
+    // set a timer to clear otp after 5 minutes
+    timeOutObj[id] = setTimeout(()=>{
+        delete resetCodesObj[id];
+        delete timeOutObj[id];
+        console.log("timeout run",id);
+    },5*60*1000,id);
+    return otp;
+}
+
+const trainerRouter = require('./src/routes/trainerRoutes')(verifyToken,transporter,EMAIL_ID);
+const adminRouter = require('./src/routes/adminRoutes')(verifyToken,transporter,EMAIL_ID);
 
 app.use('/trainer',trainerRouter);
 app.use('/admin',adminRouter);
@@ -143,6 +166,71 @@ app.put('/changepassword', verifyToken ,(req,res)=>{
         }
     });
 });
+
+app.post('/getresetcode',(req,res)=>{
+    let email = req.body.email;
+    CredentialData.findOne({email:email})
+    .then((user)=>{
+        if(user){
+            let otp = generateOTP(user.ictId);
+
+            let mailOptions = {
+                from: EMAIL_ID, // sender address
+                to: user.email, // list of receivers
+                subject: "Password reset request", // Subject line
+                text: `Your password reset code is ${otp}. This code is valid for 5 minutes only.` // plain text body
+                // html: "<b>Hello world?</b>", // html body
+            };
+            transporter.sendMail(mailOptions);
+            res.status(200).send();
+        }
+        else{
+            res.status(404).send("Sorry, We could not find any account with this email id.");
+        }
+    })
+    .catch((err)=>{
+        console.log(err);
+        //Handle error here
+        res.status(500).send("Database read error")
+    });
+})
+
+app.post('/reset-password',(req,res)=>{
+    let email = req.body.email;
+    let password = req.body.password;
+    let resetCode = req.body.resetCode;
+    CredentialData.findOne({email:email})
+    .then((user)=>{
+        if(user){
+            if(resetCodesObj[user.ictId] == resetCode){     //otp matched
+                CredentialData.findOneAndUpdate({"ictId":user.ictId},{"password":password})
+                .then(()=>{
+                    // Clear otp and timer
+                    delete resetCodesObj[user.ictId];
+                    if(timeOutObj[user.ictId]){
+                        clearTimeout(timeOutObj[user.ictId]);
+                        delete timeOutObj[user.ictId];
+                    }
+                    res.status(200).send();
+                })
+            }
+            else if(resetCodesObj[user.ictId] == undefined){    //no otp found
+                res.status(410).send("Reset code expired. Please generate new code.");
+            }
+            else{
+                res.status(401).send("Wrong reset code. Please try again.");
+            }
+        }
+        else{
+            res.status(404).send("Sorry, We could not find any account with this email id.");
+        }
+    })
+    .catch((err)=>{
+        console.log(err);
+        //Handle error here
+        res.status(500).send("Database read error")
+    });
+})
 
 app.get('/courses',(req,res)=>{
     CourseData.find({},{"_id":0,"__v":0})
