@@ -232,6 +232,12 @@ app.post('/reset-password',(req,res)=>{
     });
 })
 
+app.get('/role',verifyToken,(req,res)=>{
+    // verifyToken middleware will fetch user information and add it to req
+    // Respond with the role of the user specified
+    res.status(200).send({"role":req.user.role});
+})
+
 app.get('/courses',(req,res)=>{
     CourseData.find({},{"_id":0,"__v":0})
     .then((courses)=>{
